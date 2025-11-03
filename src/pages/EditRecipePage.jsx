@@ -1,8 +1,17 @@
-// src/pages/EditRecipePage.jsx
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Upload, X, Plus, Image as ImageIcon, Loader, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  ArrowLeft,
+  Upload,
+  X,
+  Plus,
+  Loader,
+  AlertCircle,
+} from 'lucide-react';
+
 import recipeService from '../services/recipeService';
 import uploadService from '../services/uploadService';
+
+import '../index.css';
 
 export default function EditRecipePage({ recipeId, onBack, onSuccess }) {
   const [loading, setLoading] = useState(true);

@@ -1,7 +1,6 @@
-// src/main.jsx
-import { StrictMode, useState } from 'react'
+// src/main.jsx - WITH URL ROUTING
+import { StrictMode, useState, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
-// Note: ErrorBoundary and RuntimeErrorOverlay removed per user request
 import SplashScreen from './pages/SplashScreen';
 import HomePage from './pages/HomePage';
 import MakananPage from './pages/MakananPage';
@@ -18,10 +17,43 @@ import PWABadge from './PWABadge';
 function AppRoot() {
   const [showSplash, setShowSplash] = useState(true);
   const [currentPage, setCurrentPage] = useState('home');
-  const [mode, setMode] = useState('list'); // 'list', 'detail', 'create', 'edit'
+  const [mode, setMode] = useState('list');
   const [selectedRecipeId, setSelectedRecipeId] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('makanan');
   const [editingRecipeId, setEditingRecipeId] = useState(null);
+
+  // Handle URL routing on mount and URL changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      
+      if (hash.startsWith('#/recipe/')) {
+        // Extract recipe ID and optional category from URL
+        // Format: #/recipe/{id} or #/recipe/{id}/{category}
+        const parts = hash.replace('#/recipe/', '').split('/');
+        const recipeId = parts[0];
+        const category = parts[1] || 'makanan';
+        
+        console.log('🔗 Opening recipe from URL:', { recipeId, category });
+        
+        // Navigate to recipe detail
+        setSelectedRecipeId(recipeId);
+        setSelectedCategory(category);
+        setMode('detail');
+        setShowSplash(false);
+      }
+    };
+
+    // Check initial URL
+    handleHashChange();
+    
+    // Listen for hash changes
+    window.addEventListener('hashchange', handleHashChange);
+    
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, []);
 
   const handleSplashComplete = () => {
     setShowSplash(false);
@@ -32,16 +64,23 @@ function AppRoot() {
     setMode('list');
     setSelectedRecipeId(null);
     setEditingRecipeId(null);
+    // Clear URL hash
+    window.location.hash = '';
   };
 
   const handleCreateRecipe = () => {
     setMode('create');
+    window.location.hash = '';
   };
 
   const handleRecipeClick = (recipeId, category) => {
+    console.log('📖 Opening recipe:', { recipeId, category });
     setSelectedRecipeId(recipeId);
     setSelectedCategory(category || currentPage);
     setMode('detail');
+    
+    // Update URL hash for sharing
+    window.location.hash = `#/recipe/${recipeId}/${category || currentPage}`;
   };
 
   const handleEditRecipe = (recipeId) => {
@@ -55,24 +94,26 @@ function AppRoot() {
     setMode('list');
     setSelectedRecipeId(null);
     setEditingRecipeId(null);
+    // Clear URL hash
+    window.location.hash = '';
   };
 
   const handleCreateSuccess = (newRecipe) => {
     alert('Resep berhasil dibuat!');
     setMode('list');
-    // Optionally navigate to the new recipe's category
     if (newRecipe && newRecipe.category) {
       setCurrentPage(newRecipe.category);
     }
+    window.location.hash = '';
   };
 
   const handleEditSuccess = (updatedRecipe) => {
     alert('Resep berhasil diperbarui!');
     setMode('list');
+    window.location.hash = '';
   };
 
   const renderCurrentPage = () => {
-    // Show Create Recipe Page
     if (mode === 'create') {
       return (
         <CreateRecipePage
@@ -82,7 +123,6 @@ function AppRoot() {
       );
     }
 
-    // Show Edit Recipe Page
     if (mode === 'edit') {
       return (
         <EditRecipePage
@@ -93,7 +133,6 @@ function AppRoot() {
       );
     }
 
-    // Show Recipe Detail
     if (mode === 'detail') {
       return (
         <RecipeDetail
@@ -105,7 +144,6 @@ function AppRoot() {
       );
     }
 
-    // Show List Pages
     switch (currentPage) {
       case 'home':
         return <HomePage onRecipeClick={handleRecipeClick} onNavigate={handleNavigation} />;
@@ -126,7 +164,6 @@ function AppRoot() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Only show navbar in list mode */}
       {mode === 'list' && (
         <>
           <DesktopNavbar 
@@ -142,7 +179,6 @@ function AppRoot() {
         </>
       )}
       
-      {/* Main Content */}
       <main className="min-h-screen">
         {renderCurrentPage()}
       </main>

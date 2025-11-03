@@ -38,7 +38,6 @@ export default function EditRecipePage({ recipeId, onBack, onSuccess }) {
         if (result.success) {
           const recipe = result.data;
           
-          // Set form data
           setFormData({
             name: recipe.name || '',
             category: recipe.category || 'makanan',
@@ -50,10 +49,8 @@ export default function EditRecipePage({ recipeId, onBack, onSuccess }) {
             is_featured: recipe.is_featured || false,
           });
           
-          // Set current image - IMPORTANT: Keep the original image URL
           setCurrentImageUrl(recipe.image_url || '');
           
-          // Set ingredients
           if (recipe.ingredients && Array.isArray(recipe.ingredients) && recipe.ingredients.length > 0) {
             setIngredients(recipe.ingredients.map(ing => ({
               name: ing.name || '',
@@ -63,14 +60,11 @@ export default function EditRecipePage({ recipeId, onBack, onSuccess }) {
             setIngredients([{ name: '', quantity: '' }]);
           }
           
-          // Set steps - Handle both object and string formats
           if (recipe.steps && Array.isArray(recipe.steps) && recipe.steps.length > 0) {
             const stepsArray = recipe.steps.map(step => {
-              // If step is an object with instruction property
               if (typeof step === 'object' && step !== null) {
                 return step.instruction || step.step || '';
               }
-              // If step is already a string
               if (typeof step === 'string') {
                 return step;
               }
@@ -81,8 +75,6 @@ export default function EditRecipePage({ recipeId, onBack, onSuccess }) {
           } else {
             setSteps(['']);
           }
-          
-          console.log('✅ Recipe loaded successfully');
         } else {
           throw new Error(result.message || 'Gagal memuat data resep');
         }
@@ -230,32 +222,24 @@ export default function EditRecipePage({ recipeId, onBack, onSuccess }) {
 
     try {
       setUpdating(true);
-      // PENTING: Gunakan gambar yang sudah ada sebagai default
       let finalImageUrl = currentImageUrl;
 
-      // Hanya upload gambar baru jika user memilih file baru
       if (imageFile) {
-        console.log('📤 Uploading new image...');
         setUploading(true);
         const uploadResult = await uploadService.uploadImage(imageFile);
         
         if (uploadResult.success) {
           finalImageUrl = uploadResult.data.url;
-          console.log('✅ New image uploaded');
         } else {
           throw new Error('Gagal upload gambar: ' + (uploadResult.error || 'Unknown error'));
         }
         setUploading(false);
-      } else {
-        console.log('ℹ️ Using existing image:', finalImageUrl);
       }
 
-      // Validasi final: pastikan ada image URL
       if (!finalImageUrl) {
         throw new Error('Image URL is required');
       }
 
-      // Prepare data
       const validIngredients = ingredients
         .filter(ing => ing.name && ing.name.trim() && ing.quantity && ing.quantity.trim())
         .map(ing => ({
@@ -271,7 +255,7 @@ export default function EditRecipePage({ recipeId, onBack, onSuccess }) {
         name: formData.name.trim(),
         category: formData.category,
         description: formData.description.trim(),
-        image_url: finalImageUrl, // SELALU include image_url (baru atau lama)
+        image_url: finalImageUrl,
         prep_time: parseInt(formData.prep_time),
         cook_time: parseInt(formData.cook_time),
         servings: parseInt(formData.servings),
@@ -281,12 +265,9 @@ export default function EditRecipePage({ recipeId, onBack, onSuccess }) {
         steps: validSteps
       };
 
-      console.log('📝 Updating recipe...');
-
       const result = await recipeService.updateRecipe(recipeId, updateData);
 
       if (result.success) {
-        console.log('✅ Recipe updated successfully');
         alert('Resep berhasil diperbarui!');
         if (onSuccess) {
           onSuccess(result.data);
@@ -297,7 +278,7 @@ export default function EditRecipePage({ recipeId, onBack, onSuccess }) {
         throw new Error(result.message || 'Gagal memperbarui resep');
       }
     } catch (err) {
-      console.error('❌ Error:', err);
+      console.error('Error:', err);
       setError(err.message || 'Terjadi kesalahan saat memperbarui resep');
     } finally {
       setUpdating(false);
@@ -345,9 +326,314 @@ export default function EditRecipePage({ recipeId, onBack, onSuccess }) {
             </div>
           )}
 
-          {/* FORM CONTINUES - Copy rest of the form from the previous artifact at document index 33 */}
-          {/* Due to length, I'm showing the key fixes. The full form structure remains the same */}
-          
+          <form onSubmit={handleSubmit} className="space-y-8">
+            {/* Image Section */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-3">
+                Gambar Resep
+              </label>
+              
+              {/* Current Image */}
+              {currentImageUrl && !imagePreview && (
+                <div className="mb-4">
+                  <p className="text-sm text-slate-600 mb-2">Gambar saat ini:</p>
+                  <div className="relative inline-block">
+                    <img
+                      src={currentImageUrl}
+                      alt="Current"
+                      className="w-full max-w-md h-64 object-cover rounded-xl shadow-lg"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* New Image Preview */}
+              {imagePreview && (
+                <div className="mb-4">
+                  <p className="text-sm text-slate-600 mb-2">Gambar baru:</p>
+                  <div className="relative inline-block">
+                    <img
+                      src={imagePreview}
+                      alt="New Preview"
+                      className="w-full max-w-md h-64 object-cover rounded-xl shadow-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRemoveNewImage}
+                      className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors shadow-lg"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Upload Button */}
+              <div>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                  onChange={handleImageChange}
+                  className="hidden"
+                  id="image-upload-edit"
+                />
+                <label
+                  htmlFor="image-upload-edit"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors cursor-pointer"
+                >
+                  <Upload className="w-4 h-4" />
+                  {imagePreview ? 'Ganti Gambar' : 'Upload Gambar Baru'}
+                </label>
+                <p className="text-sm text-slate-500 mt-2">
+                  Maksimal 5MB (.jpg, .jpeg, .png, .webp)
+                </p>
+              </div>
+            </div>
+
+            {/* Basic Info */}
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Nama Resep <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  placeholder="Nasi Goreng Spesial"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Kategori <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="category"
+                  value={formData.category}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="makanan">Makanan</option>
+                  <option value="minuman">Minuman</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Deskripsi
+              </label>
+              <textarea
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                placeholder="Ceritakan tentang resep ini..."
+                rows={4}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+              />
+            </div>
+
+            {/* Time & Servings */}
+            <div className="grid md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Waktu Persiapan (menit) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  name="prep_time"
+                  value={formData.prep_time}
+                  onChange={handleChange}
+                  placeholder="15"
+                  min="1"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Waktu Memasak (menit) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  name="cook_time"
+                  value={formData.cook_time}
+                  onChange={handleChange}
+                  placeholder="20"
+                  min="1"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Porsi (orang) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  name="servings"
+                  value={formData.servings}
+                  onChange={handleChange}
+                  placeholder="4"
+                  min="1"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Difficulty */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Tingkat Kesulitan <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="difficulty"
+                value={formData.difficulty}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="mudah">Mudah</option>
+                <option value="sedang">Sedang</option>
+                <option value="sulit">Sulit</option>
+              </select>
+            </div>
+
+            {/* Ingredients */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-3">
+                Bahan-bahan <span className="text-red-500">*</span>
+              </label>
+              <div className="space-y-3">
+                {ingredients.map((ingredient, index) => (
+                  <div key={index} className="flex gap-3">
+                    <input
+                      type="text"
+                      value={ingredient.name}
+                      onChange={(e) => handleIngredientChange(index, 'name', e.target.value)}
+                      placeholder="Nama bahan"
+                      className="flex-1 px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <input
+                      type="text"
+                      value={ingredient.quantity}
+                      onChange={(e) => handleIngredientChange(index, 'quantity', e.target.value)}
+                      placeholder="Jumlah"
+                      className="w-32 px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeIngredient(index)}
+                      disabled={ingredients.length === 1}
+                      className="p-3 text-red-600 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addIngredient}
+                  className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  Tambah Bahan
+                </button>
+              </div>
+            </div>
+
+            {/* Steps */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-3">
+                Langkah-langkah <span className="text-red-500">*</span>
+              </label>
+              <div className="space-y-3">
+                {steps.map((step, index) => (
+                  <div key={index} className="flex gap-3">
+                    <div className="flex-shrink-0 w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">
+                      {index + 1}
+                    </div>
+                    <textarea
+                      value={step}
+                      onChange={(e) => handleStepChange(index, e.target.value)}
+                      placeholder="Tulis langkah..."
+                      rows={2}
+                      className="flex-1 px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeStep(index)}
+                      disabled={steps.length === 1}
+                      className="p-3 text-red-600 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed self-start"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addStep}
+                  className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  Tambah Langkah
+                </button>
+              </div>
+            </div>
+
+            {/* Featured Toggle */}
+            <div className="flex items-center gap-3 bg-blue-50 p-4 rounded-xl">
+              <input
+                type="checkbox"
+                id="is_featured"
+                name="is_featured"
+                checked={formData.is_featured}
+                onChange={handleChange}
+                className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+              />
+              <label htmlFor="is_featured" className="text-sm text-slate-700 cursor-pointer">
+                Tandai sebagai resep unggulan
+              </label>
+            </div>
+
+            {/* Submit Buttons */}
+            <div className="flex flex-col md:flex-row gap-4 pt-6">
+              <button
+                type="button"
+                onClick={onBack}
+                disabled={updating}
+                className="flex-1 px-6 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={updating || uploading}
+                className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {uploading ? (
+                  <>
+                    <Loader className="w-5 h-5 animate-spin" />
+                    Mengupload gambar...
+                  </>
+                ) : updating ? (
+                  <>
+                    <Loader className="w-5 h-5 animate-spin" />
+                    Memperbarui resep...
+                  </>
+                ) : (
+                  'Perbarui Resep'
+                )}
+              </button>
+            </div>
+          </form>
         </div>
       </main>
     </div>

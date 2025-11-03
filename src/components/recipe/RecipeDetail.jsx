@@ -1,5 +1,5 @@
-// src/components/recipe/RecipeDetail.jsx
-import { useState } from 'react';
+// src/components/recipe/RecipeDetail.jsx - FIXED VERSION
+import { useState, useEffect } from 'react';
 import { useRecipe } from '../../hooks/useRecipes';
 import { useReviews, useCreateReview } from '../../hooks/useReviews';
 import { useIsFavorited } from '../../hooks/useFavorites';
@@ -22,6 +22,11 @@ export default function RecipeDetail({ recipeId, onBack, onEdit, category = 'mak
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Debug: Log reviews when they change
+  useEffect(() => {
+    console.log('📋 Reviews loaded:', reviews);
+  }, [reviews]);
 
   const categoryColors = {
     makanan: {
@@ -49,22 +54,43 @@ export default function RecipeDetail({ recipeId, onBack, onEdit, category = 'mak
   const handleSubmitReview = async (e) => {
     e.preventDefault();
     
-    // Get username from user profile
-    const userProfile = userService.getUserProfile();
+    // Validation
+    if (!comment.trim()) {
+      alert('Komentar tidak boleh kosong');
+      return;
+    }
+
+    // CRITICAL: Use unique user identifier, NOT username
+    // This ensures each user's reviews are uniquely identifiable
+    const userIdentifier = getUserIdentifier();
+    
+    console.log('🔍 Submitting review with user identifier:', userIdentifier);
     
     const reviewData = {
-      user_identifier: userProfile.username || getUserIdentifier(),
+      user_identifier: userIdentifier,
       rating,
       comment: comment.trim(),
     };
 
-    const success = await createReview(recipeId, reviewData);
+    console.log('📤 Review data:', reviewData);
+
+    const result = await createReview(recipeId, reviewData);
     
-    if (success) {
+    console.log('✅ Create review result:', result);
+    
+    if (result && result.success) {
       setComment('');
       setRating(5);
       setShowReviewForm(false);
-      refetchReviews();
+      
+      // Wait a bit before refetching to ensure backend has processed
+      setTimeout(() => {
+        refetchReviews();
+      }, 500);
+      
+      alert('Ulasan berhasil ditambahkan!');
+    } else {
+      alert('Gagal menambahkan ulasan: ' + (result?.message || 'Unknown error'));
     }
   };
 
@@ -170,12 +196,7 @@ export default function RecipeDetail({ recipeId, onBack, onEdit, category = 'mak
           {onEdit && (
             <div className="flex gap-2">
               <button
-                onClick={() => {
-                  console.log('🖱️ Edit button clicked in RecipeDetail');
-                  console.log('📝 Recipe ID:', recipeId);
-                  console.log('🔧 onEdit function:', onEdit);
-                  onEdit(recipeId);
-                }}
+                onClick={() => onEdit(recipeId)}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <Edit className="w-4 h-4" />
@@ -205,7 +226,7 @@ export default function RecipeDetail({ recipeId, onBack, onEdit, category = 'mak
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
             
-            {/* Favorite Button - Use component */}
+            {/* Favorite Button */}
             <div className="absolute top-4 right-4 z-10">
               <FavoriteButton recipeId={recipeId} size="lg" />
             </div>
@@ -379,7 +400,7 @@ export default function RecipeDetail({ recipeId, onBack, onEdit, category = 'mak
 
               <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Komentar
+                  Komentar <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   value={comment}
@@ -387,6 +408,7 @@ export default function RecipeDetail({ recipeId, onBack, onEdit, category = 'mak
                   placeholder="Bagikan pengalaman Anda dengan resep ini..."
                   rows={4}
                   className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white resize-none"
+                  required
                 />
               </div>
 
@@ -406,42 +428,57 @@ export default function RecipeDetail({ recipeId, onBack, onEdit, category = 'mak
             {reviewsLoading ? (
               <div className="text-center py-8">
                 <div className={`animate-spin rounded-full h-8 w-8 border-b-2 border-${colors.primary}-600 mx-auto`}></div>
+                <p className="mt-2 text-slate-500">Memuat ulasan...</p>
               </div>
             ) : reviews && reviews.length > 0 ? (
-              reviews.map((review) => (
-                <div
-                  key={review.id}
-                  className="bg-white/70 rounded-2xl p-6 border border-white/60"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <p className="font-semibold text-slate-800">
-                        {review.user_identifier}
-                      </p>
-                      <div className="flex items-center gap-1 mt-1">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <Star
-                            key={star}
-                            className={`w-4 h-4 ${
-                              star <= review.rating
-                                ? 'text-amber-500 fill-current'
-                                : 'text-slate-300'
-                            }`}
-                          />
-                        ))}
+              reviews.map((review) => {
+                // Get display name: try to get username from profile, fallback to identifier
+                const currentUserIdentifier = getUserIdentifier();
+                const isCurrentUser = review.user_identifier === currentUserIdentifier;
+                const displayName = isCurrentUser ? userService.getUserProfile().username : review.user_identifier;
+                
+                return (
+                  <div
+                    key={review.id}
+                    className="bg-white/70 rounded-2xl p-6 border border-white/60"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-slate-800">
+                            {displayName}
+                          </p>
+                          {isCurrentUser && (
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+                              Anda
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 mt-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star
+                              key={star}
+                              className={`w-4 h-4 ${
+                                star <= review.rating
+                                  ? 'text-amber-500 fill-current'
+                                  : 'text-slate-300'
+                              }`}
+                            />
+                          ))}
+                        </div>
                       </div>
+                      <p className="text-sm text-slate-500">
+                        {formatDate(review.created_at)}
+                      </p>
                     </div>
-                    <p className="text-sm text-slate-500">
-                      {formatDate(review.created_at)}
-                    </p>
+                    {review.comment && (
+                      <p className="text-slate-700 leading-relaxed">
+                        {review.comment}
+                      </p>
+                    )}
                   </div>
-                  {review.comment && (
-                    <p className="text-slate-700 leading-relaxed">
-                      {review.comment}
-                    </p>
-                  )}
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="text-center py-8">
                 <p className="text-slate-500">Belum ada ulasan untuk resep ini.</p>

@@ -1,14 +1,15 @@
+// src/pages/ProfilePage.jsx - DEBUG VERSION
 import { useState, useEffect } from 'react';
-import { User, Heart, Star, Edit2, Save, X, Camera, ChefHat, Coffee } from 'lucide-react';
+import { User, Heart, Star, Edit2, Save, X, Camera, ChefHat, Coffee, RefreshCw } from 'lucide-react';
 import userService from '../services/userService';
 import reviewService from '../services/reviewService';
+import recipeService from '../services/recipeService';
 import { getFavoriteRecipes } from '../utils/favoriteUtils';
 
 export default function ProfilePage({ onRecipeClick }) {
-  const [activeTab, setActiveTab] = useState('favorites'); // 'favorites' | 'reviews'
+  const [activeTab, setActiveTab] = useState('favorites');
   const [isEditing, setIsEditing] = useState(false);
   
-  // User Profile State
   const [userProfile, setUserProfile] = useState({
     username: 'Pengguna',
     avatar: null,
@@ -20,35 +21,32 @@ export default function ProfilePage({ onRecipeClick }) {
     bio: ''
   });
 
-  // Favorites - menggunakan localStorage
   const [favorites, setFavorites] = useState([]);
   const [favLoading, setFavLoading] = useState(true);
   const [favError, setFavError] = useState(null);
   
-  // Reviews
   const [userReviews, setUserReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [debugInfo, setDebugInfo] = useState(null);
 
   // Load user profile on mount
   useEffect(() => {
     const profile = userService.getUserProfile();
+    console.log('👤 User Profile:', profile);
     setUserProfile(profile);
     setEditProfile({
       username: profile.username,
       bio: profile.bio || ''
     });
     
-    // Load favorites from localStorage
     loadFavoritesFromLocalStorage();
   }, []);
 
-  // Load favorites from localStorage
   const loadFavoritesFromLocalStorage = async () => {
     try {
       setFavLoading(true);
       setFavError(null);
       
-      // Use utility function to get favorites
       const recipes = await getFavoriteRecipes();
       setFavorites(recipes);
     } catch (err) {
@@ -59,7 +57,6 @@ export default function ProfilePage({ onRecipeClick }) {
     }
   };
 
-  // Listen to localStorage changes (when favorite is toggled)
   useEffect(() => {
     const handleStorageChange = (e) => {
       if (e.key === 'favorites') {
@@ -69,7 +66,6 @@ export default function ProfilePage({ onRecipeClick }) {
 
     window.addEventListener('storage', handleStorageChange);
     
-    // Also listen to custom event for same-window updates
     const handleFavoriteUpdate = () => {
       loadFavoritesFromLocalStorage();
     };
@@ -81,62 +77,121 @@ export default function ProfilePage({ onRecipeClick }) {
     };
   }, []);
 
-  // Load user reviews
+  // Load user reviews when tab changes to reviews
   useEffect(() => {
-    loadUserReviews();
-  }, []);
+    if (activeTab === 'reviews') {
+      loadUserReviews();
+    }
+  }, [activeTab]);
 
   const loadUserReviews = async () => {
     try {
       setReviewsLoading(true);
       const userIdentifier = userService.getUserIdentifier();
+      const userProfile = userService.getUserProfile();
+      const username = userProfile.username;
       
-      // Get all reviews from favorites
-      const reviewsPromises = favorites.map(async (recipe) => {
+      console.log('🔍 DEBUG: Loading reviews...');
+      console.log('👤 Username:', username);
+      console.log('🆔 User Identifier:', userIdentifier);
+      
+      // Strategy 1: Get all recipes with pagination
+      let allRecipes = [];
+      let page = 1;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const recipesResponse = await recipeService.getRecipes({
+          page,
+          limit: 50
+        });
+        
+        const recipes = recipesResponse?.data || [];
+        allRecipes = [...allRecipes, ...recipes];
+        
+        const pagination = recipesResponse?.pagination;
+        hasMore = pagination && page < pagination.total_pages;
+        page++;
+        
+        console.log(`📚 Loaded page ${page - 1}, total recipes so far: ${allRecipes.length}`);
+      }
+      
+      console.log(`📚 Total recipes to check: ${allRecipes.length}`);
+      
+      // Strategy 2: For each recipe, get reviews and filter
+      const allUserReviews = [];
+      let totalReviewsChecked = 0;
+      
+      for (const recipe of allRecipes) {
         try {
           const response = await reviewService.getReviews(recipe.id);
-          if (response.success && response.data) {
-            // Filter reviews by current user
-            const userReview = response.data.find(
-              review => review.user_identifier === userIdentifier
-            );
-            if (userReview) {
-              return {
-                ...userReview,
+          
+          if (response.success && response.data && Array.isArray(response.data)) {
+            totalReviewsChecked += response.data.length;
+            
+            // Filter reviews - ONLY by exact user identifier match
+            const userReviewsForRecipe = response.data.filter(review => {
+              // CRITICAL: Only match by unique user identifier, NOT by username
+              const matches = review.user_identifier === userIdentifier;
+              
+              if (matches) {
+                console.log('✅ Found matching review:', {
+                  recipe: recipe.name,
+                  review_user: review.user_identifier,
+                  our_identifier: userIdentifier
+                });
+              }
+              
+              return matches;
+            });
+            
+            // Add recipe info to each review
+            userReviewsForRecipe.forEach(review => {
+              allUserReviews.push({
+                ...review,
                 recipe_name: recipe.name,
                 recipe_id: recipe.id,
                 recipe_image: recipe.image_url,
                 recipe_category: recipe.category
-              };
-            }
+              });
+            });
           }
-          return null;
         } catch (err) {
-          return null;
+          console.error(`❌ Error fetching reviews for recipe ${recipe.id}:`, err);
         }
+      }
+      
+      console.log('📊 DEBUG INFO:');
+      console.log(`- Total recipes checked: ${allRecipes.length}`);
+      console.log(`- Total reviews checked: ${totalReviewsChecked}`);
+      console.log(`- User reviews found: ${allUserReviews.length}`);
+      console.log('- User reviews:', allUserReviews);
+      
+      setDebugInfo({
+        totalRecipes: allRecipes.length,
+        totalReviews: totalReviewsChecked,
+        userReviews: allUserReviews.length,
+        username,
+        userIdentifier
       });
-
-      const reviews = await Promise.all(reviewsPromises);
-      setUserReviews(reviews.filter(r => r !== null));
+      
+      setUserReviews(allUserReviews);
     } catch (err) {
-      console.error('Error loading reviews:', err);
+      console.error('❌ Error loading reviews:', err);
     } finally {
       setReviewsLoading(false);
     }
   };
 
-  // Handle avatar upload
   const handleAvatarChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Validate file size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
       alert('Ukuran file maksimal 2MB');
       return;
     }
 
-    // Convert to base64
     const reader = new FileReader();
     reader.onloadend = () => {
       const result = userService.updateAvatar(reader.result);
@@ -148,7 +203,6 @@ export default function ProfilePage({ onRecipeClick }) {
     reader.readAsDataURL(file);
   };
 
-  // Handle save profile
   const handleSaveProfile = () => {
     const result = userService.saveUserProfile({
       username: editProfile.username.trim() || 'Pengguna',
@@ -195,7 +249,6 @@ export default function ProfilePage({ onRecipeClick }) {
                 )}
               </div>
               
-              {/* Change Avatar Button */}
               <label className="absolute bottom-0 right-0 p-2 bg-blue-600 text-white rounded-full cursor-pointer hover:bg-blue-700 transition-colors shadow-lg">
                 <Camera className="w-4 h-4" />
                 <input
@@ -327,7 +380,6 @@ export default function ProfilePage({ onRecipeClick }) {
 
         {/* Content */}
         {activeTab === 'favorites' ? (
-          /* Favorites Tab */
           <div>
             {favLoading ? (
               <div className="text-center py-12">
@@ -396,8 +448,7 @@ export default function ProfilePage({ onRecipeClick }) {
             )}
           </div>
         ) : (
-          /* Reviews Tab */
-          <div>
+          <div>        
             {reviewsLoading ? (
               <div className="text-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
@@ -407,7 +458,12 @@ export default function ProfilePage({ onRecipeClick }) {
               <div className="text-center py-16">
                 <Star className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                 <p className="text-slate-600 text-lg mb-2">Belum ada ulasan</p>
-                <p className="text-slate-500">Berikan ulasan pada resep favorit Anda</p>
+                <p className="text-slate-500 mb-4">Berikan ulasan pada resep favorit Anda</p>
+                {debugInfo && (
+                  <p className="text-xs text-slate-400">
+                    Checked {debugInfo.totalReviews} reviews across {debugInfo.totalRecipes} recipes
+                  </p>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
@@ -417,7 +473,6 @@ export default function ProfilePage({ onRecipeClick }) {
                     className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/40 hover:shadow-xl transition-shadow"
                   >
                     <div className="flex gap-4">
-                      {/* Recipe Image */}
                       <div
                         onClick={() => onRecipeClick && onRecipeClick(review.recipe_id, review.recipe_category)}
                         className="flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden cursor-pointer group"
@@ -429,7 +484,6 @@ export default function ProfilePage({ onRecipeClick }) {
                         />
                       </div>
 
-                      {/* Review Content */}
                       <div className="flex-1">
                         <div className="flex items-start justify-between mb-2">
                           <div>

@@ -56,6 +56,11 @@ export default function FavoriteButton({ recipeId, onToggle, showCount = false, 
     localStorage.setItem('favorites', JSON.stringify(favorites));
     setIsFavorited(newFavoritedState);
 
+    // Dispatch custom event to notify other components
+    window.dispatchEvent(new CustomEvent('favoriteUpdated', { 
+      detail: { recipeId, isFavorited: newFavoritedState } 
+    }));
+
     // Call parent callback if provided
     if (onToggle) {
       onToggle(recipeId, newFavoritedState);
